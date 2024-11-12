@@ -1,76 +1,84 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
 from matplotlib.colors import ListedColormap
+from matplotlib.widgets import Slider
+import random
+
+n = 15
+blue_percentage = 0.45
+red_percentage = 0.45
+empty_percentage = 0.10
 
 
-n = 50
-blue_ratio = 0.45
-red_ratio = 0.45
-empty_ratio = 0.10
-threshold = 2
-
-
-def initialize_grid(n, blue_ratio, red_ratio, empty_ratio):
-    total_cells = n * n
-    num_blue = int(total_cells * blue_ratio)
-    num_red = int(total_cells * red_ratio)
-    num_empty = total_cells - num_blue - num_red
-
-    grid = np.array([1] * num_blue + [2] * num_red + [0] * num_empty)
-    np.random.shuffle(grid)
-    return grid.reshape((n, n))
+def initialize_grid(n, blue_percentage, red_percentage, empty_percentage):
+    cells = np.random.choice(
+        [0, 1, 2], size=(n, n),
+        p=[empty_percentage, blue_percentage, red_percentage]
+    )
+    return cells
 
 
 def is_happy(grid, x, y):
-    cell = grid[x, y]
-    if cell == 0:
+    color = grid[x, y]
+    if color == 0:
         return True
 
-    neighbors = grid[max(0, x - 1):min(n, x + 2), max(0, y - 1):min(n, y + 2)]
-    same_color_count = np.sum(neighbors == cell) - 1
-    return same_color_count >= threshold
+    neighbors = []
+    for i in range(max(0, x - 1), min(n, x + 2)):
+        for j in range(max(0, y - 1), min(n, y + 2)):
+            if (i, j) != (x, y):
+                neighbors.append(grid[i, j])
+
+    same_color_neighbors = neighbors.count(color)
+    return same_color_neighbors >= 2
 
 
-def step(grid):
-    unhappy_cells = []
-    empty_cells = list(zip(*np.where(grid == 0)))
+def move_unhappy_cells(grid):
+    unhappy_cells = [(x, y) for x in range(n) for y in range(n)
+                     if grid[x, y] != 0 and not is_happy(grid, x, y)]
+    empty_cells = [(x, y) for x in range(n) for y in range(n) if grid[x, y] == 0]
+
+    if not unhappy_cells or not empty_cells:
+        return False
+
+    for (x, y) in unhappy_cells:
+        new_x, new_y = random.choice(empty_cells)
+        grid[new_x, new_y] = grid[x, y]
+        grid[x, y] = 0
+        empty_cells.remove((new_x, new_y))
+        empty_cells.append((x, y))
+
+    return True
 
 
-    for x in range(n):
-        for y in range(n):
-            if grid[x, y] != 0 and not is_happy(grid, x, y):
-                unhappy_cells.append((x, y))
+def simulate_and_store(max_steps):
+    global grid_states
+    grid = initialize_grid(n, blue_percentage, red_percentage, empty_percentage)
+    grid_states = [grid.copy()]
+
+    for step in range(0, max_steps):
+        if not move_unhappy_cells(grid):
+            break  # Остановка, если все клетки счастливы
+        grid_states.append(grid.copy())
 
 
-    np.random.shuffle(unhappy_cells)
-    for x, y in unhappy_cells:
-        if empty_cells:
-            new_x, new_y = empty_cells.pop()
-            grid[new_x, new_y], grid[x, y] = grid[x, y], 0
+simulate_and_store(50)
 
-    return grid
+fig, ax = plt.subplots(figsize=(6, 6))
+cmap = ListedColormap(['white', 'blue', 'red'])
+im = ax.imshow(grid_states[0], cmap=cmap)
+plt.axis('off')
 
-grid = initialize_grid(n, blue_ratio, red_ratio, empty_ratio)
-
-cmap = ListedColormap(["white", "blue", "red"])
-
-fig, ax = plt.subplots()
-plt.subplots_adjust(bottom=0.2)
-im = ax.imshow(grid, cmap=cmap)
-
-ax_slider = plt.axes([0.25, 0.05, 0.65, 0.03], facecolor='lightgoldenrodyellow')
-iteration_slider = Slider(ax_slider, 'Iteration', 0, 100, valinit=0, valstep=1)
+slider_ax = plt.axes([0.2, 0.05, 0.6, 0.03], facecolor='lightgrey')
+iteration_slider = Slider(slider_ax, 'Step', 0, len(grid_states) - 1, valinit=0, valstep=1)
 
 
 def update(val):
     iteration = int(iteration_slider.val)
-    temp_grid = grid.copy()
-    for _ in range(iteration):
-        temp_grid = step(temp_grid)
-    im.set_data(temp_grid)
+    im.set_data(grid_states[iteration])
     fig.canvas.draw_idle()
 
 
 iteration_slider.on_changed(update)
+
 plt.show()
